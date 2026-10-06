@@ -1,0 +1,76 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics import accuracy_score, classification_report
+import pickle
+
+# 1. ĐỌC DỮ LIỆU
+# Giả sử bạn lưu bộ dữ liệu thứ 2 với tên loan_default.csv
+df = pd.read_csv('/content/drive/MyDrive/ML/loan_default.csv')
+
+print("Kích thước dữ liệu gốc:", df.shape)
+
+# 2. XÁC ĐỊNH CÁC BIẾN (Dựa trên cấu trúc phổ biến của bộ Loan Default)
+# Biến mục tiêu (Target): Cột Default (0 = Trả nợ, 1 = Vỡ nợ)
+target = 'Default' 
+
+# Các biến đầu vào (Features)
+# Lấy ví dụ vài cột tiêu biểu: Số tiền vay, Lãi suất, Thu nhập, Tuổi, Mục đích vay
+numeric_features = ['LoanAmount', 'InterestRate', 'Income', 'Age', 'CreditScore']
+categorical_features = ['LoanPurpose', 'EmploymentType']
+
+# Xóa các dòng không có kết quả Default (nếu có)
+df = df.dropna(subset=[target])
+
+X = df[numeric_features + categorical_features]
+y = df[target]
+
+# 3. XÂY DỰNG PIPELINE XỬ LÝ TỰ ĐỘNG
+# Hệ thống thực tế cần tự biết điền dữ liệu thiếu và mã hóa chữ thành số
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='median')), # Điền số trung vị nếu bị thiếu
+    ('scaler', StandardScaler())                   # Chuẩn hóa khoảng cách
+])
+
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='most_frequent')), # Điền giá trị phổ biến nhất nếu thiếu chữ
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))    # Biến chữ thành các cột 0/1
+])
+
+# Gộp 2 bộ xử lý lại
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features)
+    ])
+
+# Xây dựng Pipeline hoàn chỉnh chứa cả thuật toán Random Forest
+rf_pipeline = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('classifier', RandomForestClassifier(n_estimators=100, random_state=42, max_depth=10))
+])
+
+# 4. HUẤN LUYỆN MÔ HÌNH
+print("Đang tiến hành phân chia dữ liệu và huấn luyện (Có thể mất 1-2 phút do dữ liệu lớn)...")
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+rf_pipeline.fit(X_train, y_train)
+
+# 5. ĐÁNH GIÁ MÔ HÌNH
+y_pred = rf_pipeline.predict(X_test)
+print("\n--- KẾT QUẢ ĐÁNH GIÁ ---")
+print(f"Độ chính xác (Accuracy): {accuracy_score(y_test, y_pred) * 100:.2f}%")
+print("\nChi tiết (Classification Report):")
+print(classification_report(y_test, y_pred))
+
+# 6. XUẤT FILE MÔ HÌNH
+model_path2 = '/content/drive/MyDrive/ML/loan_default_rf_model.pkl'
+with open(model_path2, 'wb') as file:
+    pickle.dump(rf_pipeline, file)
+
+print(f"\nĐã xuất mô hình 2 thành công tại: {model_path2}")
